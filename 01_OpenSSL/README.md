@@ -1,9 +1,5 @@
 # OpenSSL을 이용한 mTLS
 
-[TOC]
-
-> Demo App: https://github.com/Great-Stone/vault-mtls-demo
-
 Vault를 사용하지 않고 OpenSSL을 활용하여 mTLS 구현
 
 ## 1. Root CA 인증서
@@ -82,7 +78,7 @@ Certificate Request:
 [Command]
 
 ```bash
-openssl x509 -req -days 3650 -in ca.csr -signkey root.key -extfile ca.ext -out ca.crt
+openssl x509 -req -days 3650 -in ca.csr -extfile ca.ext -signkey root.key -out ca.crt
 ```
 
 * `-days`: 인증서 기간 10년
@@ -146,3 +142,221 @@ Certificate:
 4. `신뢰` 항목 -> `이 인증서 사용 시`를 `항상 신뢰`로 변경
 
 ![Screenshot-0589900](./img/Screenshot-0589900.png)
+
+## 2. 서비스 A 용 인증서
+
+### 2.1. 서비스 A 용 Key 생성
+
+서비스 A 용 인증서를 생성하기 위한 Key 생성
+
+[Command]
+
+```bash
+openssl genrsa -aes256 -out service-a-with-pw.key 2048
+```
+
+```bash
+openssl rsa -in service-a-with-pw.key -out service-a.key
+```
+
+* 패스워드 4자리 이상 입력 필요
+
+
+
+### 2.2. 서비스 A 용 요청서(CSR) 생성
+
+[Command]
+
+```bash
+openssl req -config service-a.conf -new -key service-a.key -out service-a.csr
+```
+
+```bash
+openssl req -text -in service-a.csr
+```
+
+[Output]
+
+```
+Certificate Request:
+    Data:
+        Version: 0 (0x0)
+        Subject: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=service-a.example.com
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                RSA Public-Key: (2048 bit)
+                Modulus:
+                    <...생략...>
+                Exponent: 65537 (0x10001)
+        Attributes:
+            a0:00
+    Signature Algorithm: sha256WithRSAEncryption
+         <...생략...>
+-----BEGIN CERTIFICATE REQUEST-----
+<...생략...>
+-----END CERTIFICATE REQUEST-----
+```
+
+
+
+### 2.3. 서비스 A 용 인증서 생성
+
+서비스 A 용 인증서가 Root CA에 종속되도록 Root CA 인증서와 Root Key를 넣어 구성
+
+[Command]
+
+```bash
+openssl x509 -req -days 365 -in service-a.csr -extfile service-a.ext -CA ca.crt -CAkey root.key -CAcreateserial -out service-a.crt
+```
+
+* `-CA`: Root CA 인증서를 지정
+
+* `-CAkey`: Roo Key를 지정
+* `-CAcreateserial`: 서명 작업에 Root CA가 서비스 A 용 인증서에 대한 일련번호 생성
+
+```bash
+openssl x509 -text -in service-a.crt
+```
+
+[Output]
+
+```
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            ec:71:b0:dd:72:c2:a2:52
+    Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=example root
+        Validity
+            Not Before: Apr  4 08:41:13 2023 GMT
+            Not After : Apr  3 08:41:13 2024 GMT
+        Subject: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=service-a.example.com
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                RSA Public-Key: (2048 bit)
+                Modulus:
+                    <...생략...>
+                Exponent: 65537 (0x10001)
+        X509v3 extensions:
+            X509v3 Subject Alternative Name:
+                DNS:service-a.example.com
+    Signature Algorithm: sha256WithRSAEncryption
+         <...생략...>
+-----BEGIN CERTIFICATE-----
+<...생략...>
+-----END CERTIFICATE-----
+```
+
+
+
+## 3. 서비스 B 용 인증서
+
+### 3.1. 서비스 B 용 Key 생성
+
+서비스 B 용 인증서를 생성하기 위한 Key 생성
+
+[Command]
+
+```bash
+openssl genrsa -aes256 -out service-b-with-pw.key 2048
+```
+
+```bash
+openssl rsa -in service-b-with-pw.key -out service-b.key
+```
+
+* 패스워드 4자리 이상 입력 필요
+
+
+
+### 3.2. 서비스 B 용 요청서(CSR) 생성
+
+[Command]
+
+```bash
+openssl req -config service-b.conf -new -key service-b.key -out service-b.csr
+```
+
+```bash
+openssl req -text -in service-b.csr
+```
+
+[Output]
+
+```
+Certificate Request:
+    Data:
+        Version: 0 (0x0)
+        Subject: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=service-b.example.com
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                RSA Public-Key: (2048 bit)
+                Modulus:
+                    <...생략...>
+                Exponent: 65537 (0x10001)
+        Attributes:
+            a0:00
+    Signature Algorithm: sha256WithRSAEncryption
+         <...생략...>
+-----BEGIN CERTIFICATE REQUEST-----
+<...생략...>
+-----END CERTIFICATE REQUEST-----
+```
+
+
+
+### 3.3. 서비스 B 용 인증서 생성
+
+서비스 B 용 인증서가 Root CA에 종속되도록 Root CA 인증서와 Root Key를 넣어 구성
+
+[Command]
+
+```bash
+openssl x509 -req -days 365 -in service-b.csr -extfile service-b.ext -CA ca.crt -CAkey root.key -CAcreateserial -out service-b.crt
+```
+
+* `-CA`: Root CA 인증서를 지정
+
+* `-CAkey`: Roo Key를 지정
+* `-CAcreateserial`: 서명 작업에 Root CA가 서비스 A 용 인증서에 대한 일련번호 생성
+
+```bash
+openssl x509 -text -in service-b.crt
+```
+
+[Output]
+
+```
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            ec:71:b0:dd:72:c2:a2:53
+    Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=example root
+        Validity
+            Not Before: Apr  4 08:49:25 2023 GMT
+            Not After : Apr  3 08:49:25 2024 GMT
+        Subject: C=KR, ST=Seongnam-si, L=Bundang-gu, O=DDIM, OU=Engineer/emailAddress=example@example.com, CN=service-b.example.com
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                RSA Public-Key: (2048 bit)
+                Modulus:
+                    <...생략...>
+                Exponent: 65537 (0x10001)
+        X509v3 extensions:
+            X509v3 Subject Alternative Name:
+                DNS:service-b.example.com
+    Signature Algorithm: sha256WithRSAEncryption
+         <...생략...>
+-----BEGIN CERTIFICATE-----
+<...생략...>
+-----END CERTIFICATE-----
+```
+
+
+
+## 4. Demo App을 이용한 Test
+
+> Demo App: https://github.com/Great-Stone/vault-mtls-demo
