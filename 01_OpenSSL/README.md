@@ -360,3 +360,231 @@ Certificate:
 ## 4. Demo App을 이용한 Test
 
 > Demo App: https://github.com/Great-Stone/vault-mtls-demo
+
+### 4.1. Preparation
+
+[Command]
+
+```bash
+pip install requests flask
+```
+
+```bash
+sudo vi /etc/hosts
+```
+
+[Contents]
+
+```
+##
+# Host Database
+#
+# localhost is used to configure the loopback interface
+# when the system is booting.  Do not change this entry.
+##
+127.0.0.1	      localhost service-a.example.com service-b.example.com
+255.255.255.255	broadcasthost
+::1             localhost
+```
+
+
+
+### 4.2. Python Demo App 실행
+
+#### 4.2.1. 서비스 A Python Demo App 내용
+
+```python
+### 생략 ###
+if __name__ == "__main__":
+    app.debug = True
+    ssl_context = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH, cafile='../cert/ca.crt')
+    ssl_context.load_cert_chain(certfile=f'../cert/{src}.crt', keyfile=f'../cert/{src}.key', password='')
+    # ssl_context.verify_mode = ssl.CERT_REQUIRED
+    app.run(host="0.0.0.0", port=src_port, ssl_context=ssl_context, use_reloader=True, extra_files=[f'../cert/{src}.crt'])
+```
+
+* `ssl.create_default_context`: ssl context를 정의. `cafile`에 Root CA 파일을 지정
+* `ssl_context.load_cert_chain`: 인증서 파일과 Key 파일을 지정하여 인증서 체인을 설정
+* `ssl_context.verify_mode`: 인증서 검증을 실행하도록 설정. 서비스 A의 경우 인증서 검증을 무시하기 위해 주석 처리
+
+
+
+#### 4.2.2. 서비스 B Python Demo App 내용
+
+```python
+### 생략 ###
+if __name__ == "__main__":
+    app.debug = True
+    ssl_context = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH, cafile='../cert/ca.crt')
+    ssl_context.load_cert_chain(certfile=f'../cert/{src}.crt', keyfile=f'../cert/{src}.key', password='')
+    ssl_context.verify_mode = ssl.CERT_REQUIRED
+    app.run(host="0.0.0.0", port=src_port, ssl_context=ssl_context, use_reloader=True, extra_files=[f'../cert/{src}.crt'])
+```
+
+* `ssl_context.verify_mode`: 인증서 검증을 실행하도록 설정. 서비스 B의 경우 서비스 A와 다르게 인증서 검증 위해 주석 제거
+
+
+
+#### 4.2.3. 서비스 A 실행
+
+[Command]
+
+```bash
+cd python_service_a
+```
+
+```bash
+python main.py
+```
+
+
+
+#### 4.2.4. 서비스 B 실행
+
+[Command]
+
+```bash
+cd python_service_b
+```
+
+```bash
+python main.py
+```
+
+
+
+### 4.3. Test API
+
+#### 4.3.1. 서비스 A Check
+
+[Command]
+
+```bash
+curl https://service-a.example.com:7443
+```
+
+```bash
+curl --insecure 
+```
+
+
+
+[Output]
+
+```
+Hello from "service-a"
+```
+
+* 서비스 A의 경우 인증서 검증을 무시하기 때문에 정상 메시지 출력
+
+
+
+#### 4.3.2. 서비스 B Check
+
+[Command]
+
+```bash
+curl https://service-b.example.coom:8443
+```
+
+[Output]
+
+```
+curl: (56) LibreSSL SSL_read: LibreSSL/3.3.6: error:1404C45C:SSL routines:ST_OK:reason(1116), errno 0
+```
+
+* 서비스 B의 경우 인증서 검증을 수행하기 때문에 인증서 요청 에러 출력
+
+[Command]
+
+```bash
+curl --cacert ca.crt --key service-b.key --cert service-b.crt https://service-b.example.com:8443
+```
+
+* Root CA, 서비스 B 용 Key, 서비스 B 용 인증서를 함께 제공하여 명령어 수행
+
+[Output]
+
+```
+Hello From "service-b"
+```
+
+* 인증서 검증을 통과하여 정상 메시지 출력
+
+
+
+#### 4.3.3. Normal mTLS Check
+
+서비스 A에서 서비스 B로 요청 시, `서비스 A 용 인증서`, `서비스 A 용 Key`, `Root CA 인증서` 모두 설정한 경우
+
+[Demo App Code]
+
+```python
+result = requests.get(f'https://{des}.example.com:{des_port}',
+         cert=(f'../cert/{src}.crt', f'../cert/{src}.key'),
+         verify='../cert/ca.crt')
+```
+
+[Command]
+
+```bash
+curl https://service-a.example.com:7443/w-mtls
+```
+
+[Output]
+
+```
+Hello From "service-b"
+```
+
+
+
+#### 4.3.4. Without Cert
+
+서비스 A에서 서비스 B로 요청 시, `서비스 A 용 인증서`, `서비스 A용 Key`를 설정하지 않는 경우
+
+[Demo App Code]
+
+```python
+result = requests.get(f'https://{des}.example.com:{des_port}',
+         verify='../cert/ca.crt')
+```
+
+[Command]
+
+```bash
+curl https://service-a.example.com:7443/wo-cert-mtls
+```
+
+[Output]
+
+```
+SSLError(SSLEOFError(8, 'EOF occurred in violation of protocol (_ssl.c:2393)'))
+```
+
+
+
+#### 4.3.5. Without Root CA
+
+서비스 A에서 서비스 B로 요청 시, `Root CA 인증서`를 설정하지 않는 경우
+
+[Demo App Code]
+
+```python
+result = requests.get(f'https://{des}.example.com:{des_port}',
+         cert=(f'../cert/{src}.crt', f'../cert/{src}.key'))
+```
+
+[Command]
+
+```bash
+curl https://service-a.example.com:7443/wo-ca-mtls
+```
+
+[Output]
+
+```
+SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self signed certificate in certificate chain (_ssl.c:992)'))
+```
+
+* 자체 서명 인증서를 요구하는 에러 메시지 출력
