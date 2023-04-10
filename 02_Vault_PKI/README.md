@@ -96,11 +96,11 @@ Success! Enabled the pki secrets engine at: pki/
 [Command]
 
 ```bash
-vault secrets tune -max-lease-ttl=8760h pki
+vault secrets tune -max-lease-ttl=87600h pki
 ```
 
 * Default TTL은 32일(768h)
-* 1년(8760h) 으로 설정
+* 10년(87600h) 으로 설정
 
 [Output]
 
@@ -128,9 +128,41 @@ vault write pki/root/generate/internal \
     ttl=87600h
 ```
 
+[Output]
+
+```
+Key              Value
+---              -----
+certificate      -----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+expiration       1996496548
+issuer_id        86b171c1-20fa-0641-0b9d-91f4eb4ae976
+issuer_name      n/a
+issuing_ca       -----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+key_id           f0146593-889e-107e-3214-b2a2eaea36c0
+key_name         n/a
+serial_number    70:24:6b:a9:3b:17:11:fb:1c:b2:36:a1:27:e9:5e:06:3a:ca:49:ba
+```
+
 
 
 #### 1.3.4. CRL 생성
 
+Certificate Revocation List(인증서 해지 목록) 엔드포인트 작성.
+클라이언트는 `CRL`의 `URL`에서 `CRL`을 다운로드 받아 인증서의 폐기여부를 확인
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant CA
+
+    Client->>CA: 1. HTTP 또는 LDAP을 이용, 인증서를 통해 교부받은 URL을 통해 CRL을 요청
+    CA->>Client: 2. 요청받은 CRL을 응답
+
+    Note over Client,CA: Client는 CRL 정보를 파싱하여 현재 접속하려는 사이트의 인증서가 CRL에 포함되어 있는지 점검
+    Note over Client,CA: CRL에는 만료 인증서에 대한 시리얼 번호가 포함
+```
 
