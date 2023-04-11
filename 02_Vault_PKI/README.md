@@ -151,7 +151,7 @@ serial_number    70:24:6b:a9:3b:17:11:fb:1c:b2:36:a1:27:e9:5e:06:3a:ca:49:ba
 
 #### 1.3.4. CRL 생성
 
-Certificate Revocation List(인증서 해지 목록) 엔드포인트 작성.
+Certificate Revocation List(인증서 **해지** 목록) 엔드포인트 작성.
 클라이언트는 `CRL`의 `URL`에서 `CRL`을 다운로드 받아 인증서의 폐기여부를 확인
 
 ```mermaid
@@ -164,5 +164,67 @@ sequenceDiagram
 
     Note over Client,CA: Client는 CRL 정보를 파싱하여 현재 접속하려는 사이트의 인증서가 CRL에 포함되어 있는지 점검
     Note over Client,CA: CRL에는 만료 인증서에 대한 시리얼 번호가 포함
+```
+
+[Command]
+
+```bash
+vault write pki/config/urls \
+    issuing_certificates="http://127.0.0.1:8200/v1/pki/ca" \
+    crl_distribution_points="http://127.0.0.1:8200/v1/pki/crl"
+```
+
+[Output]
+
+```
+Success! Data written to: pki/config/urls
+```
+
+
+
+#### 1.3.5. Role 생성
+
+[Command]
+
+```bash
+vault write pki/roles/example-dot-com \
+    allowed_domains="example.com" \
+    allow_subdomains=true \
+    max_ttl="720h"
+```
+
+[Output]
+
+```
+Success! Data written to: pki/roles/example-dot-com
+```
+
+
+
+#### 1.3.6. 발급
+
+```bash
+vault write pki/issue/example-dot-com \
+    common_name=service-a.example.com
+```
+
+```
+Key                 Value
+---                 -----
+ca_chain            [-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----]
+certificate         -----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+expiration          1683986821
+issuing_ca          -----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+private_key         -----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----
+private_key_type    rsa
+serial_number       1b:dc:6d:1e:a4:44:41:b6:ec:41:6b:a1:3d:43:56:6c:b0:11:5e:63
 ```
 
