@@ -201,12 +201,16 @@ Success! Data written to: pki/roles/example-dot-com
 
 
 
-#### 1.3.6. 발급
+#### 1.3.6. 인증서 발급
+
+[Command]
 
 ```bash
 vault write pki/issue/example-dot-com \
     common_name=service-a.example.com
 ```
+
+[Output]
 
 ```
 Key                 Value
