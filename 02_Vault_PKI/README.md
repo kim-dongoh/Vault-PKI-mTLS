@@ -73,9 +73,9 @@ policies             ["root"]
 
 
 
-### 1.3. PKI 설정
+## 2. PKI 설정
 
-#### 1.3.1. PKI Secret Engine 활성화
+### 2.1. PKI Secret Engine 활성화
 
 [Command]
 
@@ -91,7 +91,7 @@ Success! Enabled the pki secrets engine at: pki/
 
 
 
-#### 1.3.2. PKI Secret Engine TTL 변경
+### 2.2. PKI Secret Engine TTL 변경
 
 [Command]
 
@@ -110,7 +110,7 @@ Success! Tuned the secrets engine at: pki/
 
 
 
-#### 1.3.3. Root CA 생성
+### 2.3. Root CA 생성
 
 [Command]
 
@@ -149,7 +149,7 @@ serial_number    70:24:6b:a9:3b:17:11:fb:1c:b2:36:a1:27:e9:5e:06:3a:ca:49:ba
 
 
 
-#### 1.3.4. CRL 생성
+### 2.4. CRL 생성
 
 Certificate Revocation List(인증서 **해지** 목록) 엔드포인트 작성.
 클라이언트는 `CRL`의 `URL`에서 `CRL`을 다운로드 받아 인증서의 폐기여부를 확인
@@ -182,7 +182,7 @@ Success! Data written to: pki/config/urls
 
 
 
-#### 1.3.5. Role 생성
+### 2.5. Role 생성
 
 [Command]
 
@@ -201,7 +201,7 @@ Success! Data written to: pki/roles/example-dot-com
 
 
 
-#### 1.3.6. 인증서 발급
+### 2.6. 인증서 발급
 
 [Command]
 
@@ -232,3 +232,170 @@ private_key_type    rsa
 serial_number       1b:dc:6d:1e:a4:44:41:b6:ec:41:6b:a1:3d:43:56:6c:b0:11:5e:63
 ```
 
+
+
+## 3. Vault Agent 설정
+
+### 3.1. Vault Agent 정책 설정
+
+[Command]
+
+```bash
+cd vault_agent
+```
+
+```bash
+vault pollicy write pki pki_policy.hcl
+```
+
+[Output]
+
+```
+Success! Uploaded policy: pki
+```
+
+
+
+### 3.2. Vault Agent 용 approle 인증 설정
+
+#### 3.2.1. Vault Agent 용 approle 활성화
+
+[Command]
+
+```bash
+vault auth enable approle
+```
+
+[Output]
+
+```
+Success! Enabled approle auth method at: approle/
+```
+
+
+
+#### 3.2.2. Vault Agent 용 approle의 role 생성
+
+[Command]
+
+```bash
+vault write auth/approle/role/pki-agent \
+	secret_id_ttl=120m \
+	token_ttl=60m \
+	token_max_tll=120m \
+	policies="pki"
+```
+
+[Output]
+
+```bash
+Success! Data written to: auth/approle/role/pki-agent
+```
+
+
+
+#### 3.2.3. RoleID 저장
+
+[Command]
+
+```bash
+vault read -field=role_id auth/approle/role/pki-agent/role-id > roleid
+```
+
+* `-field`: Command의 Output 중 특정 항목만 출력
+
+일반적인 RoleID 정보 출력
+
+[Command]
+
+```bash
+vault read auth/approle/role/pki-agent/role-id
+```
+
+[Output]
+
+```
+Key        Value
+---        -----
+role_id    bc486c38-d7be-a685-4026-3b46e1ab634e
+```
+
+
+
+#### 3.2.4. SecretID 생성 및 저장
+
+[Command]
+
+```bash
+vault write -f -field=secret_id auth/approle/role/pki-agent/secret-id > secretid
+```
+
+* `-field`: Command의 Output 중 특정 항목만 출력
+
+일반적인 SecretID 생성 및 출력
+
+[Command]
+
+```bash
+vault write -f auth/approle/role/pki-agent/secret-id
+```
+
+[Output]
+
+```
+Key                   Value
+---                   -----
+secret_id             2adb95a6-fa31-c248-9ab9-17bd152e7a03
+secret_id_accessor    5d35140f-6158-8f2f-1af4-1f2481a17228
+secret_id_num_uses    0
+secret_id_ttl         2h
+```
+
+* Vault Agent 재기동 시 `secret_id` 재발급 필요
+
+
+
+### 3.3. Template 확인
+
+Vault Agent는 Template을 사용하여 Secret을 특정 파일로 랜더링 가능
+
+[vault_agent.hcl 파일 예시]
+
+```hcl
+template {
+  source      = "ca-a.tpl"
+  destination = "../cert/ca.crt"
+}
+
+template {
+  source      = "cert-a.tpl"
+  destination = "../cert/service-a.crt"
+}
+
+template {
+  source      = "key-a.tpl"
+  destination = "../cert/service-a.key"
+}
+
+template {
+  source      = "cert-b.tpl"
+  destination = "../cert/service-b.crt"
+}
+
+template {
+  source      = "key-b.tpl"
+  destination = "../cert/service-b.key"
+}
+```
+
+[ca-a.tpl 파일 예시]
+
+```tpl
+# ca-a.tpl
+{{- /* ca-a.tpl */ -}}
+{{ with secret "pki/issue/example-dot-com" "common_name=service-a.example.com" "ttl=2m" }}
+{{ .Data.issuing_ca }}{{ end }}
+```
+
+* `pki/issue/example-dot-com`에서 `common_name=service-a.example.com`인 인증서를 발급
+* Vault로부터 받는 결과 중 `issuing_ca` 값을 추출
