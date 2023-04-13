@@ -147,6 +147,8 @@ key_name         n/a
 serial_number    70:24:6b:a9:3b:17:11:fb:1c:b2:36:a1:27:e9:5e:06:3a:ca:49:ba
 ```
 
+* PKI Secret Engine  `pki` 경로에서 `role`을 생성하여 발급되는 인증서들은 모두 해당 Root CA에 종속됨
+
 
 
 ### 2.4. CRL 생성
@@ -184,11 +186,15 @@ Success! Data written to: pki/config/urls
 
 ### 2.5. Role 생성
 
+> https://developer.hashicorp.com/vault/api-docs/secret/pki#create-update-role
+
 [Command]
 
 ```bash
 vault write pki/roles/example-dot-com \
     allowed_domains="example.com" \
+    allow_bare_domains=true \
+    allowed_wildcard_certificates=true \
     allow_subdomains=true \
     max_ttl="720h"
 ```
@@ -231,6 +237,8 @@ private_key         -----BEGIN RSA PRIVATE KEY-----
 private_key_type    rsa
 serial_number       1b:dc:6d:1e:a4:44:41:b6:ec:41:6b:a1:3d:43:56:6c:b0:11:5e:63
 ```
+
+* `ca_chain`, `issuing_ca`: 2.3. 과정의 Root CA의 값과 동일(Root CA에 종속)
 
 
 
@@ -355,7 +363,7 @@ secret_id_ttl         2h
 
 
 
-### 3.3. Template 확인
+### 3.3. Template 확인 및 수정
 
 Vault Agent는 Template을 사용하여 Secret을 특정 파일로 랜더링 가능
 
@@ -388,6 +396,8 @@ template {
 }
 ```
 
+* Template(`.tpl` 파일)에 대한 랜더링 결과를 특정 파일에 저장하도록 명시
+
 [ca-a.tpl 파일 예시]
 
 ```tpl
@@ -398,4 +408,55 @@ template {
 ```
 
 * `pki/issue/example-dot-com`에서 `common_name=service-a.example.com`인 인증서를 발급
-* Vault로부터 받는 결과 중 `issuing_ca` 값을 추출
+* `.Data.issuing_ca`: Vault로부터 받는 결과 중 `issuing_ca` 값을 추출
+
+
+
+[Command]
+
+```bash
+vi ca-a.tpl
+```
+
+```tpl
+# ca-a.tpl
+{{- /* ca-a.tpl */ -}}
+{{ with secret "pki/issue/example-dot-com" "common_name=service-a.example.com" "ttl=10h" }}
+{{ .Data.issuing_ca }}{{ end }}
+```
+
+* `ttl` 값 적당히 조절
+
+
+
+### 3.4. Vault Agent 실행
+
+[Command]
+
+```bash
+vault agent -config=vault_agent.hcl -log-level=debug
+```
+
+[Output]
+
+```
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) rendering "ca-a.tpl" => "../cert/ca.crt"
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) checking template a04612e63b9a03a45ef968a8984a23db
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) rendering "cert-a.tpl" => "../cert/service-a.crt"
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) checking template 850589d81f7afe64c7c5a0a8440c8569
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) rendering "key-a.tpl" => "../cert/service-a.key"
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) checking template 60e7f2683d2c76a501eb54879bf89ad2
+2023-04-13T14:07:42.797+0900 [DEBUG] (runner) rendering "cert-b.tpl" => "../cert/service-b.crt"
+2023-04-13T14:07:42.801+0900 [INFO] (runner) rendered "cert-b.tpl" => "../cert/service-b.crt"
+2023-04-13T14:07:42.801+0900 [DEBUG] (runner) checking template 1fb22b9f15857b7eeb0b68a3c9ac6d20
+2023-04-13T14:07:42.802+0900 [DEBUG] (runner) rendering "key-b.tpl" => "../cert/service-b.key"
+2023-04-13T14:07:42.807+0900 [INFO] (runner) rendered "key-b.tpl" => "../cert/service-b.key"
+```
+
+* Vault Agent가 새로 생성한 `ca.cert` 파일을 키체인에 새로 등록해 주어야 한다.
+
+
+
+Browser에서 `https://service-a.example.com:7443/w-mtls` 접속 시 인증서가 제대로 동작하는 것을 알 수 있다.
+
+![Screenshot 1](./img/Screenshot 1.png)
